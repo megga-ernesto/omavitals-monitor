@@ -24,7 +24,8 @@ ColumnLayout {
   property string grouping: "single"
   property var expanded: ({})
   property int page: 0
-  readonly property var results: Model.build(sampleData ? sampleData.rows : [], search.text, filter, sort, grouping, expanded)
+  property string searchQuery: ""
+  readonly property var results: Model.build(sampleData ? sampleData.rows : [], searchQuery, filter, sort, grouping, expanded)
   readonly property int pages: Math.max(1, Math.ceil(results.rows.length / pageSize))
   readonly property int currentPage: Math.min(page, pages - 1)
 
@@ -100,18 +101,27 @@ ColumnLayout {
     Layout.topMargin: Commons.Style.space(10)
   }
 
-  Ui.TextField {
-    id: search
+  // KeyboardPanel retains its contents after closing. Destroy the editable
+  // control immediately so a closed popup has no clipboard listener from it.
+  Loader {
     Layout.fillWidth: true
-    placeholderText: panel.translate("process.search")
-    background: Ui.BorderSurface {
-      radius: Commons.Style.space(8)
-      color: Commons.Style.controlFill(search.activeFocus, search.hovered,
-        Commons.Color.popups.text, Commons.Color.accent)
-      borderSpec: Commons.Border.controlSpec(search.activeFocus ? "focus"
-        : (search.hovered ? "hover-cursor" : "normal"), Commons.Color.popups.text, Commons.Color.accent)
+    active: panel.running
+    sourceComponent: Ui.TextField {
+      id: search
+      text: panel.searchQuery
+      placeholderText: panel.translate("process.search")
+      background: Ui.BorderSurface {
+        radius: Commons.Style.space(8)
+        color: Commons.Style.controlFill(search.activeFocus, search.hovered,
+          Commons.Color.popups.text, Commons.Color.accent)
+        borderSpec: Commons.Border.controlSpec(search.activeFocus ? "focus"
+          : (search.hovered ? "hover-cursor" : "normal"), Commons.Color.popups.text, Commons.Color.accent)
+      }
+      onTextEdited: {
+        panel.searchQuery = text
+        panel.page = 0
+      }
     }
-    onTextChanged: panel.page = 0
   }
 
   GridLayout {
