@@ -1,5 +1,7 @@
 # ElMeGGa OmaVitals
 
+![Panel de ElMeGGa OmaVitals con gráficas de recursos y filtros de procesos](preview.png)
+
 Monitor de recursos para la barra de Omarchy. Muestra lecturas en vivo de CPU, RAM, zram, swap, GPU, disco, red, almacenamiento, batería y temperatura de CPU. Los sensores y datos de GPU disponibles dependen del equipo y sus controladores.
 
 El panel muestra gráficas del último minuto, barras de porcentaje y detalles de hardware. La sección de procesos permite buscar por nombre, programa, ruta o PID, filtrar por actividad y agrupar por programa o proceso padre.
@@ -20,7 +22,7 @@ Instala el complemento desde su repositorio público con el instalador de Omarch
 omarchy plugin add https://github.com/megga-ernesto/omavitals-monitor.git --enable
 ```
 
-Haz clic en el widget para abrir el panel. El engranaje despliega los ajustes de métricas, formatos de lectura, columnas y tamaños. El botón que está a su lado alterna entre las gráficas y la lista de procesos.
+Haz clic en el widget para abrir el panel. El engranaje despliega los ajustes de métricas, formatos de lectura, columnas y tamaños. El botón que está a su lado alterna entre las gráficas y la lista de procesos. Arrastra el tirador **⠿** de una tarjeta o pastilla para reordenar los medidores en el panel y en la barra.
 
 ## Actualización y desinstalación
 

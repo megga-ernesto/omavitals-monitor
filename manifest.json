@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "elmegga.omavitals-monitor",
   "name": "ElMeGGa OmaVitals",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "ElMeGGa",
   "license": "MIT",
   "description": "Mediciones configurables de recursos del sistema desde la barra.",

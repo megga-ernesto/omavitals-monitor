@@ -32,7 +32,15 @@ Ui.BarWidget {
     const configured = setting("metrics", ["cpu", "ram"])
     return metrics.filter(m => Array.isArray(configured) && configured.includes(m.key)).map(m => m.key)
   }
-  readonly property var displayedMetrics: metrics.filter(m => activeKeys.includes(m.key))
+  readonly property var orderedMetrics: {
+    const saved = setting("metricOrder", [])
+    const available = metrics.map(metric => metric.key)
+    const ordered = Array.isArray(saved)
+      ? saved.filter((key, index) => available.includes(key) && saved.indexOf(key) === index) : []
+    return ordered.concat(available.filter(key => !ordered.includes(key)))
+      .map(key => metrics.find(metric => metric.key === key))
+  }
+  readonly property var displayedMetrics: orderedMetrics.filter(metric => activeKeys.includes(metric.key))
   readonly property string mode: modes.includes(setting("mode", "both")) ? setting("mode", "both") : "both"
   readonly property int fontSize: sizeSetting("fontSize", 12)
   readonly property int iconSize: sizeSetting("iconSize", 15)
@@ -81,6 +89,23 @@ Ui.BarWidget {
 
   function toggleMetric(key, enabled) {
     save("metrics", enabled ? activeKeys.concat([key]) : activeKeys.filter(item => item !== key))
+  }
+
+  function moveMetric(source, target) {
+    const keys = orderedMetrics.map(metric => metric.key)
+    const from = keys.indexOf(source)
+    const to = keys.indexOf(target)
+    if (from < 0 || to < 0 || from === to)
+      return
+    keys.splice(from, 1)
+    keys.splice(to, 0, source)
+    save("metricOrder", keys)
+  }
+
+  function moveMetricBy(key, list, offset) {
+    const index = list.findIndex(metric => metric.key === key) + offset
+    if (index >= 0 && index < list.length)
+      moveMetric(key, list[index].key)
   }
 
   function sample() {
@@ -517,6 +542,81 @@ Ui.BarWidget {
         Accessible.name: hint || text
       }
 
+      property Item reorderTarget: null
+
+      component ReorderHandle: Item {
+        id: handle
+        required property string metricKey
+        required property var candidates
+        required property var entries
+        implicitWidth: Commons.Style.space(20)
+        implicitHeight: Commons.Style.space(22)
+        activeFocusOnTab: true
+        Accessible.name: strings.t("reorderMetric").arg(strings.t(metricKey))
+        Accessible.description: strings.t("reorderKeys")
+
+        function targetAt(x, y) {
+          for (let i = 0; i < entries.count; ++i) {
+            const entry = entries.itemAt(i)
+            if (!entry || entry.metricKey === metricKey)
+              continue
+            const point = pointer.mapToItem(entry, x, y)
+            if (entry.contains(point))
+              return entry
+          }
+          return null
+        }
+
+        Keys.onLeftPressed: root.moveMetricBy(metricKey, candidates, Commons.I18n.rightToLeft ? 1 : -1)
+        Keys.onRightPressed: root.moveMetricBy(metricKey, candidates, Commons.I18n.rightToLeft ? -1 : 1)
+
+        Rectangle {
+          anchors.fill: parent
+          radius: Commons.Style.space(6)
+          color: handle.activeFocus || pointer.containsMouse || pointer.moving
+            ? Qt.rgba(root.panelInk.r, root.panelInk.g, root.panelInk.b, 0.16) : "transparent"
+        }
+
+        PanelText {
+          anchors.centerIn: parent
+          text: "⠿"
+          color: root.softInk
+        }
+
+        MouseArea {
+          id: pointer
+          property point origin
+          property bool moving: false
+          anchors.fill: parent
+          hoverEnabled: true
+          preventStealing: true
+          cursorShape: moving ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
+          onPressed: function(mouse) {
+            origin = Qt.point(mouse.x, mouse.y)
+            moving = false
+          }
+          onPositionChanged: function(mouse) {
+            if (!pressed)
+              return
+            moving = moving || Math.hypot(mouse.x - origin.x, mouse.y - origin.y) >= Commons.Style.space(6)
+            if (moving)
+              page.reorderTarget = handle.targetAt(mouse.x, mouse.y)
+          }
+          onReleased: function(mouse) {
+            const target = moving ? handle.targetAt(mouse.x, mouse.y) : null
+            if (target)
+              Qt.callLater(root.moveMetric, handle.metricKey, target.metricKey)
+            moving = false
+            page.reorderTarget = null
+          }
+          onCanceled: {
+            moving = false
+            page.reorderTarget = null
+          }
+        }
+      }
+
       component SizeControl: RowLayout {
         id: sizeControl
         required property string label
@@ -732,15 +832,44 @@ Ui.BarWidget {
                   spacing: Commons.Style.space(4)
 
                   Repeater {
-                    model: root.metrics
-                    QuickButton {
+                    id: chipEntries
+                    model: root.orderedMetrics
+                    delegate: Item {
+                      id: chip
                       required property var modelData
-                      text: strings.t(modelData.shortKey || modelData.key)
-                      hint: strings.t(modelData.key)
-                      selected: root.activeKeys.includes(modelData.key)
-                      Accessible.role: Accessible.CheckBox
-                      Accessible.checked: selected
-                      onClicked: root.toggleMetric(modelData.key, !selected)
+                      readonly property string metricKey: modelData.key
+                      implicitWidth: chipRow.implicitWidth
+                      implicitHeight: chipRow.implicitHeight
+
+                      RowLayout {
+                        id: chipRow
+                        anchors.fill: parent
+                        spacing: Commons.Style.space(2)
+
+                        QuickButton {
+                          text: strings.t(chip.modelData.shortKey || chip.metricKey)
+                          hint: strings.t(chip.metricKey)
+                          selected: root.activeKeys.includes(chip.metricKey)
+                          Accessible.role: Accessible.CheckBox
+                          Accessible.checked: selected
+                          onClicked: root.toggleMetric(chip.metricKey, !selected)
+                        }
+
+                        ReorderHandle {
+                          metricKey: chip.metricKey
+                          candidates: root.orderedMetrics
+                          entries: chipEntries
+                        }
+                      }
+
+                      Rectangle {
+                        visible: page.reorderTarget === chip
+                        anchors.fill: parent
+                        radius: Commons.Style.space(8)
+                        color: "transparent"
+                        border.color: Commons.Color.accent
+                        border.width: 2
+                      }
                     }
                   }
                 }
@@ -765,6 +894,7 @@ Ui.BarWidget {
             rowSpacing: Commons.Style.space(10)
 
             Repeater {
+              id: cardEntries
               model: root.displayedMetrics
 
               delegate: Card {
@@ -784,6 +914,9 @@ Ui.BarWidget {
                 Layout.minimumWidth: 0
                 Layout.preferredWidth: 1
                 implicitHeight: cardBody.implicitHeight + Commons.Style.space(24)
+                border.color: page.reorderTarget === card ? Commons.Color.accent
+                  : Qt.rgba(root.panelInk.r, root.panelInk.g, root.panelInk.b, 0.15)
+                border.width: page.reorderTarget === card ? 2 : 1
 
                 ColumnLayout {
                   id: cardBody
@@ -805,6 +938,11 @@ Ui.BarWidget {
                       font.bold: true
                       elide: Text.ElideRight
                       Layout.fillWidth: true
+                    }
+                    ReorderHandle {
+                      metricKey: card.metricKey
+                      candidates: root.displayedMetrics
+                      entries: cardEntries
                     }
                     QuickButton {
                       readonly property var options: root.readingModes(card.metricKey)
@@ -879,6 +1017,7 @@ Ui.BarWidget {
                     }
                   }
                 }
+
               }
             }
           }

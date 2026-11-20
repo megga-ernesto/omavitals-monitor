@@ -106,5 +106,7 @@
   "cycleReading": "Change reading · %1",
   "increaseSize": "Increase size · %1",
   "decreaseSize": "Decrease size · %1",
-  "backToCharts": "Back to charts"
+  "backToCharts": "Back to charts",
+  "reorderMetric": "Move %1",
+  "reorderKeys": "Use the left and right arrows to reorder."
 }
