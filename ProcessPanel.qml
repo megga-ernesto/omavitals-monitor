@@ -10,12 +10,13 @@ ColumnLayout {
   id: panel
 
   required property bool running
+  required property int refreshInterval
   required property var translate
   required property var formatNumber
   required property var formatSpeed
   readonly property color ink: Commons.Color.popups.text
-  readonly property color muted: Qt.rgba(ink.r, ink.g, ink.b, 0.73)
-  readonly property color surface: Qt.rgba(ink.r, ink.g, ink.b, 0.065)
+  readonly property color muted: Qt.tint(ink, Qt.alpha(Commons.Color.popups.background, 0.32))
+  readonly property color surface: Qt.alpha(ink, 0.055)
   readonly property int pageSize: 10
   property var sampleData: null
   property bool failed: false
@@ -87,7 +88,7 @@ ColumnLayout {
   }
 
   Timer {
-    interval: 2500
+    interval: panel.refreshInterval
     repeat: true
     triggeredOnStart: true
     running: panel.running
@@ -97,7 +98,7 @@ ColumnLayout {
   Label {
     text: panel.translate("process.title")
     font.bold: true
-    font.pixelSize: Commons.Style.space(17)
+    font.pixelSize: Commons.Style.font.subtitle
     Layout.topMargin: Commons.Style.space(10)
   }
 
@@ -111,7 +112,7 @@ ColumnLayout {
       text: panel.searchQuery
       placeholderText: panel.translate("process.search")
       background: Ui.BorderSurface {
-        radius: Commons.Style.space(8)
+        radius: height / 2
         color: Commons.Style.controlFill(search.activeFocus, search.hovered,
           Commons.Color.popups.text, Commons.Color.accent)
         borderSpec: Commons.Border.controlSpec(search.activeFocus ? "focus"

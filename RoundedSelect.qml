@@ -32,14 +32,14 @@ ColumnLayout {
     currentIndex: control.options.findIndex(option => option.value === control.value)
     font.family: Commons.Style.font.family
     font.pixelSize: Commons.Style.font.bodySmall
-    implicitHeight: Commons.Style.spacing.controlHeight
+    implicitHeight: Commons.Style.space(34)
     leftPadding: Commons.Style.space(10)
-    rightPadding: Commons.Style.space(26)
+    rightPadding: Commons.Style.space(28)
     Accessible.name: control.label
     onActivated: control.changed(currentValue)
 
     background: Ui.BorderSurface {
-      radius: Commons.Style.space(8)
+      radius: height / 2
       color: Commons.Style.controlFill(selector.activeFocus, selector.hovered,
         Commons.Color.popups.text, Commons.Color.accent)
       borderSpec: Commons.Border.controlSpec(selector.activeFocus ? "focus"
@@ -73,7 +73,7 @@ ColumnLayout {
       highlighted: selector.highlightedIndex === index
 
       background: Rectangle {
-        radius: Commons.Style.space(6)
+        radius: Commons.Style.space(8)
         color: optionRow.highlighted ? Commons.Style.selectedFillFor(Commons.Color.popups.text, Commons.Color.accent)
                                   : "transparent"
       }
@@ -91,9 +91,9 @@ ColumnLayout {
       y: selector.height + Commons.Style.space(4)
       width: selector.width
       padding: Commons.Style.space(4)
-      implicitHeight: Math.min(contentItem.implicitHeight, Commons.Style.space(220)) + topPadding + bottomPadding
+      implicitHeight: Math.min(contentItem.implicitHeight, Commons.Style.space(240)) + topPadding + bottomPadding
       background: Ui.BorderSurface {
-        radius: Commons.Style.space(10)
+        radius: Commons.Style.space(14)
         color: Commons.Color.popups.background
         borderSpec: Commons.Border.surfaceSpec("popups", "border", Commons.Color.popups.border, 1)
       }

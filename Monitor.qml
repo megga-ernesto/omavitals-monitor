@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import qs.Commons as Commons
 import qs.Ui as Ui
 
@@ -42,11 +43,23 @@ Ui.BarWidget {
   }
   readonly property var displayedMetrics: orderedMetrics.filter(metric => activeKeys.includes(metric.key))
   readonly property string mode: modes.includes(setting("mode", "both")) ? setting("mode", "both") : "both"
-  readonly property int fontSize: sizeSetting("fontSize", 12)
-  readonly property int iconSize: sizeSetting("iconSize", 15)
-  readonly property int historySize: 30
+  readonly property int fontSize: sizeSetting("fontSize", 14)
+  readonly property int iconSize: sizeSetting("iconSize", 14)
+  readonly property int refreshSeconds: {
+    const seconds = Number(setting("refreshSeconds", 2))
+    return Number.isInteger(seconds) && seconds >= 1 && seconds <= 30 ? seconds : 2
+  }
+  readonly property int historySize: 1 + Math.floor(60 / refreshSeconds)
+  onRefreshSecondsChanged: history = ({})
   readonly property color panelInk: Commons.Color.popups.text
-  readonly property color softInk: Qt.rgba(panelInk.r, panelInk.g, panelInk.b, 0.73)
+  readonly property color panelBackground: Commons.Color.popups.background
+  readonly property color softInk: Qt.tint(panelInk, Qt.alpha(panelBackground, 0.32))
+  readonly property color accentInk: Commons.Color.accent.hslLightness > 0.56 ? "#171717" : "#ffffff"
+  readonly property bool glassFinish: setting("glassFinish", false) === true
+  readonly property bool blurBackdrop: setting("blurBackdrop", false) === true
+  readonly property bool wantsBackdropBlur: opened && glassFinish && blurBackdrop
+  property bool backdropBlurFailed: false
+  readonly property int barContentHeight: Math.max(8, barSize - 2 * Commons.Style.space(3))
   property var history: ({})
   property var hardware: ({})
   property bool showingSettings: false
@@ -399,7 +412,7 @@ Ui.BarWidget {
   }
 
   Timer {
-    interval: 2000
+    interval: root.refreshSeconds * 1000
     repeat: true
     running: root.activeKeys.length > 0
     triggeredOnStart: true
@@ -431,7 +444,7 @@ Ui.BarWidget {
         text: "󰄨"
         color: button.foreground
         font.family: button.fontFamily
-        font.pixelSize: root.iconSize
+        font.pixelSize: Math.min(root.iconSize, root.barContentHeight)
       }
 
       Repeater {
@@ -452,7 +465,7 @@ Ui.BarWidget {
             text: modelData.icon
             color: metricBadge.ink
             font.family: button.fontFamily
-            font.pixelSize: root.iconSize
+            font.pixelSize: Math.min(root.iconSize, root.barContentHeight)
             Layout.alignment: Qt.AlignCenter
           }
           Text {
@@ -468,7 +481,7 @@ Ui.BarWidget {
             }
             color: metricBadge.ink
             font.family: button.fontFamily
-            font.pixelSize: root.fontSize
+            font.pixelSize: Math.min(root.fontSize, root.barContentHeight)
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
             Layout.maximumWidth: root.vertical ? root.barSize : implicitWidth
@@ -478,16 +491,64 @@ Ui.BarWidget {
     }
   }
 
+  Process {
+    command: ["python3", "-B", decodeURIComponent(String(Qt.resolvedUrl("backdrop-blur.py")).slice(7))]
+    running: root.wantsBackdropBlur
+    onStarted: root.backdropBlurFailed = false
+    onExited: function(code) {
+      root.backdropBlurFailed = root.wantsBackdropBlur && code !== 0
+    }
+  }
+
+  Item {
+    id: panelAnchor
+    parent: button
+    width: button.width
+    height: button.height
+    x: panel.anchorShift
+  }
+
+  TransformWatcher {
+    id: barAnchorTransform
+    a: panel.anchorWindow ? panel.anchorWindow.contentItem : null
+    b: button
+  }
+
   Ui.KeyboardPanel {
     id: panel
+    WlrLayershell.namespace: "omarchy-omavitals"
     bar: root.bar
-    anchorItem: button
+    anchorItem: panelAnchor
     owner: root
     open: root.opened
     focusTarget: loadedContent
-    contentWidth: fittedContentWidth(Commons.Style.space(
-      Math.max(530, Math.min(root.cardsPerRow, root.displayedMetrics.length) * 250 + 30)))
-    contentHeight: fittedContentHeight(loadedContentHeight, Commons.Style.space(660))
+    padding: 0
+    borderSpec: Commons.Border.none()
+
+    readonly property real paneGap: Commons.Style.space(10)
+    readonly property real preferredSettingsWidth: Commons.Style.space(442)
+    readonly property real preferredMainWidth: Commons.Style.space(
+      Math.max(442, Math.min(root.cardsPerRow, root.displayedMetrics.length) * 220 + 20))
+    readonly property bool sideBySide: root.showingSettings && availableCardWidth >= Commons.Style.space(760) + paneGap
+    readonly property bool stacked: root.showingSettings && !sideBySide
+    readonly property real settingsWidth: sideBySide
+      ? Math.min(preferredSettingsWidth, Math.max(Commons.Style.space(318), availableCardWidth * 0.37))
+      : mainWidth
+    readonly property real mainWidth: fittedContentWidth(sideBySide
+      ? Math.min(preferredMainWidth, availableCardWidth - settingsWidth - paneGap) : preferredMainWidth)
+    readonly property real anchorCenter: {
+      barAnchorTransform.transform
+      return anchorWindow ? button.mapToItem(anchorWindow.contentItem, button.width / 2, 0).x : 0
+    }
+    readonly property real mainLeft: Math.max(margin, Math.min(anchorCenter - mainWidth / 2, screenW - margin - mainWidth))
+    readonly property bool settingsOnLeft: barPos === "right" || (barPos !== "left"
+      && mainLeft - margin > screenW - margin - mainLeft - mainWidth)
+    readonly property real anchorShift: sideBySide && !root.vertical
+      ? mainLeft - (settingsOnLeft ? settingsWidth + paneGap : 0) + contentWidth / 2 - anchorCenter : 0
+    readonly property real heightLimit: Math.min(availableCardHeight || Commons.Style.space(660), Commons.Style.space(660))
+
+    contentWidth: sideBySide ? mainWidth + paneGap + settingsWidth : mainWidth
+    contentHeight: fittedContentHeight(loadedContentHeight, heightLimit)
 
     content: FocusScope {
       id: page
@@ -505,13 +566,18 @@ Ui.BarWidget {
 
       Binding {
         target: page.outerSurface
-        property: "radius"
-        value: Commons.Style.space(16)
+        property: "color"
+        value: "transparent"
         when: page.outerSurface !== null
       }
 
       anchors.fill: parent
-      implicitHeight: panelLayout.implicitHeight
+      readonly property real mainHeight: Math.min(panelLayout.implicitHeight + Commons.Style.space(20),
+        panel.stacked ? (panel.heightLimit - panel.paneGap) * 0.52 : panel.heightLimit)
+      readonly property real settingsHeight: Math.min(settingsLayout.implicitHeight + Commons.Style.space(20),
+        panel.stacked ? panel.heightLimit - mainHeight - panel.paneGap : panel.heightLimit)
+      implicitHeight: !root.showingSettings ? mainHeight : panel.stacked
+        ? mainHeight + panel.paneGap + settingsHeight : Math.max(mainHeight, settingsHeight)
       Keys.onEscapePressed: {
         if (root.showingSettings) root.showingSettings = false
         else root.close()
@@ -525,14 +591,17 @@ Ui.BarWidget {
       }
 
       component Card: Rectangle {
-        radius: Commons.Style.space(12)
-        color: Qt.rgba(root.panelInk.r, root.panelInk.g, root.panelInk.b, 0.065)
+        radius: Commons.Style.space(14)
+        color: Qt.alpha(root.panelInk, 0.055)
         border.color: Qt.rgba(root.panelInk.r, root.panelInk.g, root.panelInk.b, 0.15)
         border.width: 1
       }
 
       component QuickButton: RoundedButton {
         foreground: root.panelInk
+        radius: height / 2
+        background: Qt.alpha(root.panelInk, 0.055)
+        opacity: enabled ? 1 : 0.4
         bordered: true
         focusable: true
         fontSize: Commons.Style.font.bodySmall
@@ -617,10 +686,13 @@ Ui.BarWidget {
         }
       }
 
-      component SizeControl: RowLayout {
+      component SizeControl: ColumnLayout {
         id: sizeControl
         required property string label
         required property int size
+        required property int maximum
+        property int minimum: 8
+        property string unit: ""
         signal modified(int value)
         spacing: Commons.Style.space(4)
 
@@ -629,147 +701,282 @@ Ui.BarWidget {
           font.pixelSize: Commons.Style.font.bodySmall
           color: root.softInk
         }
-        QuickButton {
-          text: "−"
-          hint: strings.t("decreaseSize").arg(sizeControl.label)
-          enabled: sizeControl.size > 8
-          onClicked: sizeControl.modified(sizeControl.size - 1)
-        }
-        PanelText {
-          text: root.number(sizeControl.size, 0)
-          horizontalAlignment: Text.AlignHCenter
-          Layout.preferredWidth: Commons.Style.space(18)
-          font.pixelSize: Commons.Style.font.bodySmall
-        }
-        QuickButton {
-          text: "+"
-          hint: strings.t("increaseSize").arg(sizeControl.label)
-          enabled: sizeControl.size < 24
-          onClicked: sizeControl.modified(sizeControl.size + 1)
-        }
-      }
 
-      ColumnLayout {
-        id: panelLayout
-        anchors.fill: parent
-        spacing: Commons.Style.space(12)
+        Rectangle {
+          Layout.minimumWidth: 0
+          Layout.preferredWidth: Commons.Style.space(126)
+          Layout.preferredHeight: Commons.Style.space(40)
+          radius: height / 2
+          color: Qt.alpha(root.panelInk, 0.055)
+          border.width: 1
+          border.color: Qt.alpha(root.panelInk, 0.15)
 
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Commons.Style.space(12)
-
-          ColumnLayout {
-            spacing: Commons.Style.space(3)
-            Layout.fillWidth: true
-            PanelText {
-              text: strings.t("title")
-              font.pixelSize: Commons.Style.space(19)
-              font.bold: true
-              elide: Text.ElideRight
-              Layout.fillWidth: true
+          RowLayout {
+            anchors.fill: parent
+            spacing: 0
+            QuickButton {
+              Layout.minimumWidth: 0
+              Layout.preferredWidth: Commons.Style.space(40)
+              Layout.fillHeight: true
+              text: "−"
+              bordered: false
+              hint: strings.t("decreaseSize").arg(sizeControl.label)
+              enabled: sizeControl.size > sizeControl.minimum
+              onClicked: sizeControl.modified(sizeControl.size - 1)
             }
             PanelText {
-              text: strings.t("historyWindow")
+              text: root.number(sizeControl.size, 0) + sizeControl.unit
+              horizontalAlignment: Text.AlignHCenter
+              Layout.fillWidth: true
               font.pixelSize: Commons.Style.font.bodySmall
-              color: root.softInk
-              elide: Text.ElideRight
-              Layout.fillWidth: true
             }
-          }
-
-          RoundedButton {
-            iconText: "󰓅"
-            fontFamily: button.fontFamily
-            selected: scroll.atProcesses
-            hint: strings.t(scroll.atProcesses ? "backToCharts" : "process.title")
-            foreground: root.panelInk
-            bordered: true
-            focusable: true
-            Accessible.name: hint
-            onClicked: {
-              if (scroll.contentItem)
-                scroll.contentItem.contentY = scroll.atProcesses ? scroll.contentItem.originY
-                                                                 : scroll.processPosition
-            }
-          }
-
-          RoundedButton {
-            iconText: "󰒓"
-            selected: root.showingSettings
-            fontFamily: button.fontFamily
-            hint: strings.t(root.showingSettings ? "hideSettings" : "settingsTitle")
-            foreground: root.panelInk
-            bordered: true
-            focusable: true
-            Accessible.name: hint
-            onClicked: {
-              root.showingSettings = !root.showingSettings
-              if (root.showingSettings && scroll.contentItem)
-                scroll.contentItem.contentY = 0
-            }
-          }
-        }
-
-        QQC.ScrollView {
-          id: scroll
-          readonly property real processOffset: view.item
-            ? Math.max(0, Math.min(view.item.processY, contentHeight - availableHeight)) : 0
-          readonly property real processPosition: (contentItem ? contentItem.originY : 0) + processOffset
-          readonly property bool atProcesses: !!contentItem && processOffset > 1
-            && contentItem.contentY >= processPosition - 1
-          Layout.fillWidth: true
-          Layout.fillHeight: true
-          Layout.preferredHeight: view.implicitHeight
-          clip: true
-          contentWidth: availableWidth
-          contentHeight: view.implicitHeight
-          QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
-
-          Loader {
-            id: view
-            width: scroll.availableWidth
-            sourceComponent: dashboard
-            onLoaded: {
-              if (scroll.contentItem)
-                scroll.contentItem.contentY = 0
+            QuickButton {
+              Layout.minimumWidth: 0
+              Layout.preferredWidth: Commons.Style.space(40)
+              Layout.fillHeight: true
+              text: "+"
+              bordered: false
+              hint: strings.t("increaseSize").arg(sizeControl.label)
+              enabled: sizeControl.size < sizeControl.maximum
+              onClicked: sizeControl.modified(sizeControl.size + 1)
             }
           }
         }
       }
 
-      Component {
-        id: dashboard
+      component SettingsGroup: Card {
+        id: group
+        required property string title
+        default property alias controls: inner.data
+        Layout.fillWidth: true
+        implicitHeight: inner.implicitHeight + Commons.Style.space(28)
+        ColumnLayout {
+          id: inner
+          anchors.fill: parent
+          anchors.margins: Commons.Style.space(14)
+          spacing: Commons.Style.space(8)
+          PanelText {
+            Layout.fillWidth: true
+            text: group.title
+            color: Commons.Color.accent
+            font.bold: true
+          }
+        }
+      }
+
+      component PaneSurface: Rectangle {
+        id: pane
+        property bool companion: false
+        radius: Commons.Style.space(20)
+        border.width: 1
+        border.color: Qt.alpha(root.panelInk, root.glassFinish ? 0.24 : 0.15)
+
+        function tone(tint, opacity) {
+          const base = Qt.tint(root.panelBackground, Qt.alpha(Commons.Color.accent, tint))
+          return root.glassFinish ? Qt.alpha(base, opacity) : base
+        }
+
+        gradient: Gradient {
+          GradientStop { position: 0; color: pane.tone(root.glassFinish ? 0.25 : pane.companion ? 0.12 : 0.17, 0.77) }
+          GradientStop { position: 0.54; color: pane.tone(root.glassFinish ? 0.12 : pane.companion ? 0.045 : 0.06, 0.72) }
+          GradientStop { position: 1; color: pane.tone(root.glassFinish ? 0.04 : 0, 0.88) }
+        }
+
+        Rectangle {
+          visible: root.glassFinish
+          anchors.top: parent.top
+          anchors.topMargin: 1
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.leftMargin: Commons.Style.space(24)
+          anchors.rightMargin: Commons.Style.space(24)
+          height: 1
+          gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0; color: "transparent" }
+            GradientStop { position: 0.5; color: Qt.alpha(root.panelInk, 0.22) }
+            GradientStop { position: 1; color: "transparent" }
+          }
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.AllButtons
+        }
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+        onClicked: root.close()
+      }
+
+      PaneSurface {
+        x: panel.sideBySide && panel.settingsOnLeft ? panel.settingsWidth + panel.paneGap : 0
+        y: panel.barPos === "bottom" ? page.height - height : 0
+        width: panel.mainWidth
+        height: page.mainHeight
 
         ColumnLayout {
-          readonly property real processY: processes.y
-          spacing: Commons.Style.space(10)
+          id: panelLayout
+          anchors.fill: parent
+          anchors.margins: Commons.Style.space(10)
+          spacing: Commons.Style.space(12)
 
-          Item {
-            id: reveal
+          RowLayout {
             Layout.fillWidth: true
-            property real revealedHeight: root.showingSettings ? controls.implicitHeight + Commons.Style.space(16) : 0
-            Layout.preferredHeight: revealedHeight
-            visible: height > 0 || root.showingSettings
-            enabled: root.showingSettings
-            clip: true
-            Behavior on revealedHeight {
-              NumberAnimation { duration: Commons.Style.duration(180); easing.type: Easing.OutCubic }
+            Layout.leftMargin: Commons.Style.space(8)
+            Layout.rightMargin: Commons.Style.space(8)
+            Layout.topMargin: Commons.Style.space(6)
+            spacing: Commons.Style.space(8)
+
+            ColumnLayout {
+              spacing: Commons.Style.space(3)
+              Layout.fillWidth: true
+              PanelText {
+                text: strings.t("title")
+                font.pixelSize: Commons.Style.font.subtitle
+                font.bold: true
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+              }
+              PanelText {
+                text: strings.t("historyWindow").arg(root.number(root.refreshSeconds, 0))
+                font.pixelSize: Commons.Style.font.bodySmall
+                color: root.softInk
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+              }
             }
 
-            Card {
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.bottom: parent.bottom
-              height: controls.implicitHeight + Commons.Style.space(16)
+            RoundedButton {
+              iconText: "󰓅"
+              Layout.preferredWidth: Commons.Style.space(37)
+              Layout.preferredHeight: Commons.Style.space(37)
+              radius: height / 2
+              iconSize: Commons.Style.space(17)
+              horizontalPadding: 0
+              verticalPadding: 0
+              fontFamily: button.fontFamily
+              selected: scroll.atProcesses
+              hint: strings.t(scroll.atProcesses ? "backToCharts" : "process.title")
+              foreground: root.panelInk
+              bordered: true
+              focusable: true
+              Accessible.name: hint
+              onClicked: {
+                if (scroll.contentItem)
+                  scroll.contentItem.contentY = scroll.atProcesses ? scroll.contentItem.originY
+                                                                   : scroll.processPosition
+              }
+            }
 
-              ColumnLayout {
-                id: controls
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: Commons.Style.space(8)
-                spacing: Commons.Style.space(6)
+            RoundedButton {
+              id: settingsButton
+              iconText: "󰒓"
+              Layout.preferredWidth: Commons.Style.space(37)
+              Layout.preferredHeight: Commons.Style.space(37)
+              radius: height / 2
+              iconSize: Commons.Style.space(17)
+              horizontalPadding: 0
+              verticalPadding: 0
+              color: root.showingSettings ? Commons.Color.accent : background
+              selected: root.showingSettings
+              fontFamily: button.fontFamily
+              hint: strings.t(root.showingSettings ? "hideSettings" : "settingsTitle")
+              foreground: root.showingSettings ? root.accentInk : root.panelInk
+              bordered: true
+              focusable: true
+              Accessible.name: hint
+              onClicked: root.showingSettings = !root.showingSettings
+            }
+          }
 
+          QQC.ScrollView {
+            id: scroll
+            readonly property real processOffset: view.item
+              ? Math.max(0, Math.min(view.item.processY, contentHeight - availableHeight)) : 0
+            readonly property real processPosition: (contentItem ? contentItem.originY : 0) + processOffset
+            readonly property bool atProcesses: !!contentItem && processOffset > 1
+              && contentItem.contentY >= processPosition - 1
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredHeight: Math.min(view.implicitHeight, Commons.Style.space(610))
+            clip: true
+            contentWidth: availableWidth
+            contentHeight: view.implicitHeight
+            QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
+
+            Loader {
+              id: view
+              width: scroll.availableWidth
+              sourceComponent: dashboard
+              onLoaded: {
+                if (scroll.contentItem)
+                  scroll.contentItem.contentY = 0
+              }
+            }
+          }
+        }
+      }
+
+      PaneSurface {
+        id: settingsPane
+        companion: true
+        visible: root.showingSettings
+        x: panel.sideBySide && !panel.settingsOnLeft ? panel.mainWidth + panel.paneGap : 0
+        y: panel.stacked ? (panel.barPos === "bottom" ? 0 : page.mainHeight + panel.paneGap)
+                         : (panel.barPos === "bottom" ? page.height - height : 0)
+        width: panel.settingsWidth
+        height: page.settingsHeight
+
+        ColumnLayout {
+          id: settingsLayout
+          anchors.fill: parent
+          anchors.margins: Commons.Style.space(10)
+          spacing: Commons.Style.space(8)
+
+          RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: Commons.Style.space(8)
+            Layout.rightMargin: Commons.Style.space(8)
+            Layout.topMargin: Commons.Style.space(6)
+
+            PanelText {
+              Layout.fillWidth: true
+              text: strings.t("settingsTitle")
+              font.pixelSize: Commons.Style.font.subtitle
+              font.bold: true
+            }
+
+            QuickButton {
+              text: "×"
+              hint: strings.t("hideSettings")
+              onClicked: {
+                root.showingSettings = false
+                settingsButton.forceActiveFocus()
+              }
+            }
+          }
+
+          QQC.ScrollView {
+            id: settingsScroll
+            background: null
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredHeight: settingsControls.implicitHeight
+            clip: true
+            contentWidth: availableWidth
+            contentHeight: settingsControls.implicitHeight
+            QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
+
+            ColumnLayout {
+              id: settingsControls
+              width: settingsScroll.availableWidth
+              spacing: Commons.Style.space(8)
+
+              SettingsGroup {
+                title: strings.t("appearance")
                 Flow {
                   Layout.fillWidth: true
                   spacing: Commons.Style.space(8)
@@ -808,25 +1015,81 @@ Ui.BarWidget {
                     }
                   }
 
+                }
+
+                Flow {
+                  Layout.fillWidth: true
+                  spacing: Commons.Style.space(10)
+
                   SizeControl {
+                    width: implicitWidth
+                    height: implicitHeight
                     label: strings.t("fontShort")
                     size: root.fontSize
+                    maximum: 18
                     onModified: value => root.save("fontSize", value)
                   }
 
                   SizeControl {
+                    width: implicitWidth
+                    height: implicitHeight
                     label: strings.t("iconsShort")
                     size: root.iconSize
+                    maximum: 22
                     onModified: value => root.save("iconSize", value)
                   }
                 }
 
-                Rectangle {
+                Ui.Toggle {
                   Layout.fillWidth: true
-                  implicitHeight: 1
-                  color: Qt.rgba(root.panelInk.r, root.panelInk.g, root.panelInk.b, 0.15)
+                  label: strings.t("glassFinish")
+                  checked: root.glassFinish
+                  foreground: root.panelInk
+                  radius: Commons.Style.space(14)
+                  rounded: true
+                  Accessible.role: Accessible.CheckBox
+                  Accessible.name: label
+                  Accessible.checked: checked
+                  onClicked: root.save("glassFinish", !checked)
                 }
 
+                Ui.Toggle {
+                  Layout.fillWidth: true
+                  visible: root.glassFinish
+                  label: strings.t("blurBackdrop")
+                  checked: root.blurBackdrop
+                  foreground: root.panelInk
+                  radius: Commons.Style.space(14)
+                  rounded: true
+                  Accessible.role: Accessible.CheckBox
+                  Accessible.name: label
+                  Accessible.checked: checked
+                  onClicked: root.save("blurBackdrop", !checked)
+                }
+
+                PanelText {
+                  visible: root.wantsBackdropBlur && root.backdropBlurFailed
+                  Layout.fillWidth: true
+                  text: strings.t("blurUnavailable")
+                  wrapMode: Text.WordWrap
+                  color: Commons.Color.urgent
+                }
+              }
+
+              SettingsGroup {
+                title: strings.t("samplingTitle")
+                SizeControl {
+                  label: strings.t("refreshInterval")
+                  size: root.refreshSeconds
+                  minimum: 1
+                  maximum: 30
+                  unit: " s"
+                  onModified: value => root.save("refreshSeconds", value)
+                }
+              }
+
+              SettingsGroup {
+                title: strings.t("metricsTitle")
                 Flow {
                   Layout.fillWidth: true
                   spacing: Commons.Style.space(4)
@@ -873,15 +1136,26 @@ Ui.BarWidget {
                     }
                   }
                 }
+              }
 
-                PanelText {
-                  visible: root.saveFailed
-                  text: strings.t("saveError")
-                  color: Commons.Color.urgent
-                }
+              PanelText {
+                visible: root.saveFailed
+                text: strings.t("saveError")
+                color: Commons.Color.urgent
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
               }
             }
           }
+        }
+      }
+
+      Component {
+        id: dashboard
+
+        ColumnLayout {
+          readonly property real processY: processes.y
+          spacing: Commons.Style.space(10)
 
           GridLayout {
             id: cards
@@ -922,7 +1196,7 @@ Ui.BarWidget {
                   id: cardBody
                   anchors.fill: parent
                   anchors.margins: Commons.Style.space(12)
-                  spacing: Commons.Style.space(7)
+                  spacing: Commons.Style.space(12)
 
                   RowLayout {
                     Layout.fillWidth: true
@@ -961,7 +1235,7 @@ Ui.BarWidget {
                   PanelText {
                     text: root.label(card.metricKey, true)
                     color: card.readingInk
-                    font.pixelSize: Commons.Style.space(15)
+                    font.pixelSize: Commons.Style.space(21)
                     font.bold: true
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
@@ -1042,6 +1316,7 @@ Ui.BarWidget {
             id: processes
             Layout.fillWidth: true
             running: root.opened
+            refreshInterval: root.refreshSeconds * 1000
             translate: key => strings.t(key)
             formatNumber: (value, decimals) => root.number(value, decimals)
             formatSpeed: value => root.speed(value)

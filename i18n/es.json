@@ -47,7 +47,7 @@
   "reading.celsius": "Celsius (°C)",
   "reading.fahrenheit": "Fahrenheit (°F)",
   "settingsTitle": "Configuración",
-  "historyWindow": "Último minuto · actualiza cada 2 s",
+  "historyWindow": "Último minuto · actualiza cada %1 s",
   "noMetrics": "Activa métricas en Configuración para ver sus estadísticas.",
   "hardware.capacity": "Capacidad %1",
   "hardware.available": "Disponible %1",
@@ -108,5 +108,14 @@
   "decreaseSize": "Reducir tamaño · %1",
   "backToCharts": "Volver a las gráficas",
   "reorderMetric": "Mover %1",
-  "reorderKeys": "Usa las flechas izquierda y derecha para cambiar de posición."
+  "reorderKeys": "Usa las flechas izquierda y derecha para cambiar de posición.",
+  "appearance": "Apariencia",
+  "metricsTitle": "Medidores",
+  "glassFinish": "Acabado cristal",
+  "on": "Sí",
+  "off": "No",
+  "blurBackdrop": "Difuminar fondo",
+  "blurUnavailable": "Hyprland no pudo activar el desenfoque.",
+  "samplingTitle": "Actualización",
+  "refreshInterval": "Intervalo de medición"
 }

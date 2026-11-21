@@ -24,6 +24,8 @@ omarchy plugin add https://github.com/megga-ernesto/omavitals-monitor.git --enab
 
 Haz clic en el widget para abrir el panel. El engranaje despliega los ajustes de métricas, formatos de lectura, columnas y tamaños. El botón que está a su lado alterna entre las gráficas y la lista de procesos. Arrastra el tirador **⠿** de una tarjeta o pastilla para reordenar los medidores en el panel y en la barra.
 
+En **Configuración → Actualización** puedes elegir un intervalo de 1 a 30 segundos (2 segundos por defecto). El acabado cristal y el desenfoque de fondo son opcionales y vienen apagados. El desenfoque usa Hyprland y puede activar temporalmente el desenfoque del compositor mientras el panel está abierto.
+
 ## Actualización y desinstalación
 
 Las instalaciones hechas con `omarchy plugin add` se actualizan desde su repositorio Git con este comando.

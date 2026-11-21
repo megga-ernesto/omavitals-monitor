@@ -47,7 +47,7 @@
   "reading.celsius": "Celsius (°C)",
   "reading.fahrenheit": "Fahrenheit (°F)",
   "settingsTitle": "Settings",
-  "historyWindow": "Last minute · updates every 2 s",
+  "historyWindow": "Last minute · updates every %1 s",
   "noMetrics": "Enable metrics in Settings to see their statistics.",
   "hardware.capacity": "Capacity %1",
   "hardware.available": "Available %1",
@@ -108,5 +108,14 @@
   "decreaseSize": "Decrease size · %1",
   "backToCharts": "Back to charts",
   "reorderMetric": "Move %1",
-  "reorderKeys": "Use the left and right arrows to reorder."
+  "reorderKeys": "Use the left and right arrows to reorder.",
+  "appearance": "Appearance",
+  "metricsTitle": "Metrics",
+  "glassFinish": "Glass finish",
+  "on": "On",
+  "off": "Off",
+  "blurBackdrop": "Blur the backdrop",
+  "blurUnavailable": "Hyprland could not enable backdrop blur.",
+  "samplingTitle": "Updates",
+  "refreshInterval": "Sampling interval"
 }
