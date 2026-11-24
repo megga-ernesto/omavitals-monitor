@@ -464,15 +464,14 @@ Ui.BarWidget {
             Layout.alignment: Qt.AlignCenter
           }
           Text {
-            visible: root.mode !== "icons"
             textFormat: Text.PlainText
             text: {
               const reading = root.label(modelData.key, false)
-              if (root.vertical)
-                return reading.replace("  ↑", "\n↑")
-              if (root.mode === "both")
-                return reading
-              return strings.t(modelData.shortKey || modelData.key) + " " + reading
+              const value = root.vertical ? reading.replace("  ↑", "\n↑") : reading
+              if (root.mode === "icons")
+                return value
+              const name = strings.t(modelData.shortKey || modelData.key)
+              return name + (root.vertical ? "\n" : " ") + value
             }
             color: metricBadge.ink
             font.family: button.fontFamily

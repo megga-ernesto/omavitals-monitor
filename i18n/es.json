@@ -1,9 +1,9 @@
 {
   "title": "ElMeGGa OmaVitals",
   "format": "Presentación en la barra",
-  "icons": "Solo iconos",
-  "both": "Iconos y texto",
-  "text": "Solo texto",
+  "icons": "Icono y valor",
+  "both": "Icono, nombre y valor",
+  "text": "Nombre y valor",
   "fontSize": "Tamaño de letra",
   "iconSize": "Tamaño de iconos",
   "cpu": "CPU",

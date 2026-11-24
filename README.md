@@ -1,8 +1,10 @@
 # ElMeGGa OmaVitals
 
-![OmaVitals en Base, Cristal y Blur](preview.png)
+![ElMeGGa OmaVitals con su panel y funciones principales](preview.png)
 
-*Paneles renderizados con datos de ejemplo y la paleta Rubí OLED. El desenfoque del fondo está simulado en la captura.*
+*Las capturas usan datos de ejemplo y la paleta Rubí OLED. La comparativa simula el desenfoque del fondo.*
+
+[Comparar Base, Cristal y Blur](docs/appearance-finishes.webp) · [ElMeGGa OmaDesktop](https://github.com/megga-ernesto/ElMeGGa-OmaDesktop)
 
 Monitor de recursos para la barra de Omarchy. Muestra lecturas en vivo de CPU, RAM, zram, swap, GPU, disco, red, almacenamiento, batería y temperatura de CPU. Los sensores y datos de GPU disponibles dependen del equipo y sus controladores.
 
@@ -11,7 +13,7 @@ El panel muestra gráficas del último minuto, barras de porcentaje y detalles d
 ## Funciones
 
 - Elige las métricas visibles y reordénalas con el tirador de cada medidor o con las flechas cuando tiene el foco.
-- Configura la barra con iconos, texto o ambos. Ajusta los tamaños y el formato de cada lectura, como capacidad usada o restante, dirección del tráfico y grados Celsius o Fahrenheit.
+- Elige **Icono y valor**, **Icono, nombre y valor** o **Nombre y valor** para la barra. La lectura permanece visible en los tres modos. Ajusta los tamaños y formatos, como capacidad usada o restante, dirección del tráfico y grados Celsius o Fahrenheit.
 - Consulta el último minuto de gráficas y el detalle de hardware. Elige las tarjetas por fila y un intervalo de muestreo de 1 a 30 segundos.
 - Busca procesos, filtra por actividad, ordena por CPU, RAM, disco, antigüedad o nombre, y agrupa por programa o proceso padre. Puedes expandir los grupos y recorrer la lista por páginas.
 
