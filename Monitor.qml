@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 import qs.Commons as Commons
 import qs.Ui as Ui
 
@@ -54,11 +53,7 @@ Ui.BarWidget {
   readonly property color panelInk: Commons.Color.popups.text
   readonly property color panelBackground: Commons.Color.popups.background
   readonly property color softInk: Qt.tint(panelInk, Qt.alpha(panelBackground, 0.32))
-  readonly property color accentInk: Commons.Color.accent.hslLightness > 0.56 ? "#171717" : "#ffffff"
-  readonly property bool glassFinish: setting("glassFinish", false) === true
-  readonly property bool blurBackdrop: setting("blurBackdrop", false) === true
-  readonly property bool wantsBackdropBlur: opened && glassFinish && blurBackdrop
-  property bool backdropBlurFailed: false
+
   readonly property int barContentHeight: Math.max(8, barSize - 2 * Commons.Style.space(3))
   property var history: ({})
   property var hardware: ({})
@@ -491,97 +486,24 @@ Ui.BarWidget {
     }
   }
 
-  Process {
-    command: ["python3", "-B", decodeURIComponent(String(Qt.resolvedUrl("backdrop-blur.py")).slice(7))]
-    running: root.wantsBackdropBlur
-    onStarted: root.backdropBlurFailed = false
-    onExited: function(code) {
-      root.backdropBlurFailed = root.wantsBackdropBlur && code !== 0
-    }
-  }
-
-  Item {
-    id: panelAnchor
-    parent: button
-    width: button.width
-    height: button.height
-    x: panel.anchorShift
-  }
-
-  TransformWatcher {
-    id: barAnchorTransform
-    a: panel.anchorWindow ? panel.anchorWindow.contentItem : null
-    b: button
-  }
-
-  Ui.KeyboardPanel {
+  OmaPanelFrame {
     id: panel
-    WlrLayershell.namespace: "omarchy-omavitals"
-    bar: root.bar
-    anchorItem: panelAnchor
+    layerName: "omarchy-omavitals"
     owner: root
+    bar: root.bar
+    anchorItem: button
     open: root.opened
-    focusTarget: loadedContent
-    padding: 0
-    borderSpec: Commons.Border.none()
+    configuring: root.showingSettings
+    legacyGlassKey: "glassFinish"
+    legacyBlurKey: "blurBackdrop"
+    preferredWidth: Commons.Style.space(Math.max(442, Math.min(root.cardsPerRow, root.displayedMetrics.length) * 220 + 20))
 
-    readonly property real paneGap: Commons.Style.space(10)
-    readonly property real preferredSettingsWidth: Commons.Style.space(442)
-    readonly property real preferredMainWidth: Commons.Style.space(
-      Math.max(442, Math.min(root.cardsPerRow, root.displayedMetrics.length) * 220 + 20))
-    readonly property bool sideBySide: root.showingSettings && availableCardWidth >= Commons.Style.space(760) + paneGap
-    readonly property bool stacked: root.showingSettings && !sideBySide
-    readonly property real settingsWidth: sideBySide
-      ? Math.min(preferredSettingsWidth, Math.max(Commons.Style.space(318), availableCardWidth * 0.37))
-      : mainWidth
-    readonly property real mainWidth: fittedContentWidth(sideBySide
-      ? Math.min(preferredMainWidth, availableCardWidth - settingsWidth - paneGap) : preferredMainWidth)
-    readonly property real anchorCenter: {
-      barAnchorTransform.transform
-      return anchorWindow ? button.mapToItem(anchorWindow.contentItem, button.width / 2, 0).x : 0
-    }
-    readonly property real mainLeft: Math.max(margin, Math.min(anchorCenter - mainWidth / 2, screenW - margin - mainWidth))
-    readonly property bool settingsOnLeft: barPos === "right" || (barPos !== "left"
-      && mainLeft - margin > screenW - margin - mainLeft - mainWidth)
-    readonly property real anchorShift: sideBySide && !root.vertical
-      ? mainLeft - (settingsOnLeft ? settingsWidth + paneGap : 0) + contentWidth / 2 - anchorCenter : 0
-    readonly property real heightLimit: Math.min(availableCardHeight || Commons.Style.space(660), Commons.Style.space(660))
-
-    contentWidth: sideBySide ? mainWidth + paneGap + settingsWidth : mainWidth
-    contentHeight: fittedContentHeight(loadedContentHeight, heightLimit)
-
-    content: FocusScope {
+    content: OmaWorkspace {
       id: page
-      // KeyboardPanel owns the outer chrome. Bind only its ancestor surface,
-      // so this widget can round its popup using the current Omarchy theme.
-      readonly property var outerSurface: {
-        let ancestor = parent
-        while (ancestor) {
-          if (ancestor instanceof Ui.BorderSurface)
-            return ancestor
-          ancestor = ancestor.parent
-        }
-        return null
-      }
-
-      Binding {
-        target: page.outerSurface
-        property: "color"
-        value: "transparent"
-        when: page.outerSurface !== null
-      }
-
-      anchors.fill: parent
-      readonly property real mainHeight: Math.min(panelLayout.implicitHeight + Commons.Style.space(20),
-        panel.stacked ? (panel.heightLimit - panel.paneGap) * 0.52 : panel.heightLimit)
-      readonly property real settingsHeight: Math.min(settingsLayout.implicitHeight + Commons.Style.space(20),
-        panel.stacked ? panel.heightLimit - mainHeight - panel.paneGap : panel.heightLimit)
-      implicitHeight: !root.showingSettings ? mainHeight : panel.stacked
-        ? mainHeight + panel.paneGap + settingsHeight : Math.max(mainHeight, settingsHeight)
-      Keys.onEscapePressed: {
-        if (root.showingSettings) root.showingSettings = false
-        else root.close()
-      }
+      frame: panel
+      mainFocus: settingsButton
+      settingsFocus: closeSettingsButton
+      onSettingsRequested: value => root.showingSettings = value
 
       component PanelText: Text {
         textFormat: Text.PlainText
@@ -744,407 +666,270 @@ Ui.BarWidget {
         }
       }
 
-      component SettingsGroup: Card {
-        id: group
-        required property string title
-        default property alias controls: inner.data
-        Layout.fillWidth: true
-        implicitHeight: inner.implicitHeight + Commons.Style.space(28)
-        ColumnLayout {
-          id: inner
-          anchors.fill: parent
-          anchors.margins: Commons.Style.space(14)
+      mainPane: ColumnLayout {
+        id: panelLayout
+        anchors.fill: parent
+        spacing: Commons.Style.spacing.panelGap
+
+        RowLayout {
+          Layout.fillWidth: true
           spacing: Commons.Style.space(8)
+
+          ColumnLayout {
+            spacing: Commons.Style.space(3)
+            Layout.fillWidth: true
+            PanelText {
+              text: strings.t("title")
+              font.pixelSize: Commons.Style.font.title
+              font.bold: true
+              elide: Text.ElideRight
+              Layout.fillWidth: true
+            }
+            PanelText {
+              text: strings.t("historyWindow").arg(root.number(root.refreshSeconds, 0))
+              font.pixelSize: Commons.Style.font.bodySmall
+              color: root.softInk
+              elide: Text.ElideRight
+              Layout.fillWidth: true
+            }
+          }
+
+          RoundedButton {
+            iconText: "󰓅"
+            Layout.preferredWidth: Commons.Style.space(37)
+            Layout.preferredHeight: Commons.Style.space(37)
+            radius: height / 2
+            iconSize: Commons.Style.space(17)
+            horizontalPadding: 0
+            verticalPadding: 0
+            fontFamily: button.fontFamily
+            selected: scroll.atProcesses
+            hint: strings.t(scroll.atProcesses ? "backToCharts" : "process.title")
+            foreground: root.panelInk
+            bordered: true
+            focusable: true
+            Accessible.name: hint
+            onClicked: {
+              if (scroll.contentItem)
+                scroll.contentItem.contentY = scroll.atProcesses ? scroll.contentItem.originY
+                                                                 : scroll.processPosition
+            }
+          }
+
+          OmaSettingsButton {
+            id: settingsButton
+            catalog: strings
+            selected: panel.configuring
+            onClicked: page.showSettings(!panel.configuring)
+          }
+        }
+
+        QQC.ScrollView {
+          id: scroll
+          readonly property real processOffset: view.item
+            ? Math.max(0, Math.min(view.item.processY, contentHeight - availableHeight)) : 0
+          readonly property real processPosition: (contentItem ? contentItem.originY : 0) + processOffset
+          readonly property bool atProcesses: !!contentItem && processOffset > 1
+            && contentItem.contentY >= processPosition - 1
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          Layout.preferredHeight: Math.min(view.implicitHeight, Commons.Style.space(610))
+          clip: true
+          contentWidth: availableWidth
+          contentHeight: view.implicitHeight
+          QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
+
+          Loader {
+            id: view
+            width: scroll.availableWidth
+            sourceComponent: dashboard
+            onLoaded: {
+              if (scroll.contentItem)
+                scroll.contentItem.contentY = 0
+            }
+          }
+        }
+      }
+
+      settingsPane: ColumnLayout {
+        id: settingsLayout
+        anchors.fill: parent
+        spacing: Commons.Style.spacing.panelGap
+
+        RowLayout {
+          Layout.fillWidth: true
+
           PanelText {
             Layout.fillWidth: true
-            text: group.title
-            color: Commons.Color.accent
+            text: strings.t("oma.settings")
+            font.pixelSize: Commons.Style.font.title
             font.bold: true
           }
-        }
-      }
 
-      component PaneSurface: Rectangle {
-        id: pane
-        property bool companion: false
-        radius: Commons.Style.space(20)
-        border.width: 1
-        border.color: Qt.alpha(root.panelInk, root.glassFinish ? 0.24 : 0.15)
-
-        function tone(tint, opacity) {
-          const base = Qt.tint(root.panelBackground, Qt.alpha(Commons.Color.accent, tint))
-          return root.glassFinish ? Qt.alpha(base, opacity) : base
-        }
-
-        gradient: Gradient {
-          GradientStop { position: 0; color: pane.tone(root.glassFinish ? 0.25 : pane.companion ? 0.12 : 0.17, 0.77) }
-          GradientStop { position: 0.54; color: pane.tone(root.glassFinish ? 0.12 : pane.companion ? 0.045 : 0.06, 0.72) }
-          GradientStop { position: 1; color: pane.tone(root.glassFinish ? 0.04 : 0, 0.88) }
-        }
-
-        Rectangle {
-          visible: root.glassFinish
-          anchors.top: parent.top
-          anchors.topMargin: 1
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.leftMargin: Commons.Style.space(24)
-          anchors.rightMargin: Commons.Style.space(24)
-          height: 1
-          gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0; color: "transparent" }
-            GradientStop { position: 0.5; color: Qt.alpha(root.panelInk, 0.22) }
-            GradientStop { position: 1; color: "transparent" }
+          OmaSettingsButton {
+            id: closeSettingsButton
+            catalog: strings
+            closing: true
+            onClicked: page.showSettings(false)
           }
         }
 
-        MouseArea {
-          anchors.fill: parent
-          acceptedButtons: Qt.AllButtons
-        }
-      }
+        QQC.ScrollView {
+          id: settingsScroll
+          background: null
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          Layout.preferredHeight: settingsControls.implicitHeight
+          clip: true
+          contentWidth: availableWidth
+          contentHeight: settingsControls.implicitHeight
+          QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
 
-      MouseArea {
-        anchors.fill: parent
-        acceptedButtons: Qt.AllButtons
-        onClicked: root.close()
-      }
-
-      PaneSurface {
-        x: panel.sideBySide && panel.settingsOnLeft ? panel.settingsWidth + panel.paneGap : 0
-        y: panel.barPos === "bottom" ? page.height - height : 0
-        width: panel.mainWidth
-        height: page.mainHeight
-
-        ColumnLayout {
-          id: panelLayout
-          anchors.fill: parent
-          anchors.margins: Commons.Style.space(10)
-          spacing: Commons.Style.space(12)
-
-          RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: Commons.Style.space(8)
-            Layout.rightMargin: Commons.Style.space(8)
-            Layout.topMargin: Commons.Style.space(6)
+          ColumnLayout {
+            id: settingsControls
+            width: settingsScroll.availableWidth
             spacing: Commons.Style.space(8)
 
-            ColumnLayout {
-              spacing: Commons.Style.space(3)
-              Layout.fillWidth: true
-              PanelText {
-                text: strings.t("title")
-                font.pixelSize: Commons.Style.font.subtitle
-                font.bold: true
-                elide: Text.ElideRight
+            OmaGroup {
+              title: strings.t("oma.appearance")
+              OmaAppearance {
                 Layout.fillWidth: true
+                frame: panel
+                catalog: strings
               }
-              PanelText {
-                text: strings.t("historyWindow").arg(root.number(root.refreshSeconds, 0))
-                font.pixelSize: Commons.Style.font.bodySmall
-                color: root.softInk
-                elide: Text.ElideRight
+              Flow {
                 Layout.fillWidth: true
+                spacing: Commons.Style.space(8)
+
+                RowLayout {
+                  spacing: Commons.Style.space(3)
+                  Repeater {
+                    model: root.modes
+                    QuickButton {
+                      required property string modelData
+                      iconText: modelData === "icons" ? "󰘔" : modelData === "text" ? "󰊄" : "󰌹"
+                      fontFamily: button.fontFamily
+                      hint: strings.t(modelData)
+                      selected: root.mode === modelData
+                      onClicked: root.save("mode", modelData)
+                    }
+                  }
+                }
+
+                RowLayout {
+                  spacing: Commons.Style.space(3)
+                  PanelText {
+                    text: strings.t("columnsShort")
+                    color: root.softInk
+                    font.pixelSize: Commons.Style.font.bodySmall
+                  }
+                  Repeater {
+                    model: root.columnOptions
+                    QuickButton {
+                      required property int modelData
+                      text: root.number(modelData, 0)
+                      hint: strings.t("cardsPerRow") + " · " + text
+                      selected: root.cardsPerRow === modelData
+                      onClicked: root.save("cardsPerRow", modelData)
+                    }
+                  }
+                }
+
+              }
+
+              Flow {
+                Layout.fillWidth: true
+                spacing: Commons.Style.space(10)
+
+                SizeControl {
+                  width: implicitWidth
+                  height: implicitHeight
+                  label: strings.t("fontShort")
+                  size: root.fontSize
+                  maximum: 18
+                  onModified: value => root.save("fontSize", value)
+                }
+
+                SizeControl {
+                  width: implicitWidth
+                  height: implicitHeight
+                  label: strings.t("iconsShort")
+                  size: root.iconSize
+                  maximum: 22
+                  onModified: value => root.save("iconSize", value)
+                }
+              }
+
+            }
+
+            OmaGroup {
+              title: strings.t("samplingTitle")
+              SizeControl {
+                label: strings.t("refreshInterval")
+                size: root.refreshSeconds
+                minimum: 1
+                maximum: 30
+                unit: " s"
+                onModified: value => root.save("refreshSeconds", value)
               }
             }
 
-            RoundedButton {
-              iconText: "󰓅"
-              Layout.preferredWidth: Commons.Style.space(37)
-              Layout.preferredHeight: Commons.Style.space(37)
-              radius: height / 2
-              iconSize: Commons.Style.space(17)
-              horizontalPadding: 0
-              verticalPadding: 0
-              fontFamily: button.fontFamily
-              selected: scroll.atProcesses
-              hint: strings.t(scroll.atProcesses ? "backToCharts" : "process.title")
-              foreground: root.panelInk
-              bordered: true
-              focusable: true
-              Accessible.name: hint
-              onClicked: {
-                if (scroll.contentItem)
-                  scroll.contentItem.contentY = scroll.atProcesses ? scroll.contentItem.originY
-                                                                   : scroll.processPosition
+            OmaGroup {
+              title: strings.t("metricsTitle")
+              Flow {
+                Layout.fillWidth: true
+                spacing: Commons.Style.space(4)
+
+                Repeater {
+                  id: chipEntries
+                  model: root.orderedMetrics
+                  delegate: Item {
+                    id: chip
+                    required property var modelData
+                    readonly property string metricKey: modelData.key
+                    implicitWidth: chipRow.implicitWidth
+                    implicitHeight: chipRow.implicitHeight
+
+                    RowLayout {
+                      id: chipRow
+                      anchors.fill: parent
+                      spacing: Commons.Style.space(2)
+
+                      QuickButton {
+                        text: strings.t(chip.modelData.shortKey || chip.metricKey)
+                        hint: strings.t(chip.metricKey)
+                        selected: root.activeKeys.includes(chip.metricKey)
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.checked: selected
+                        onClicked: root.toggleMetric(chip.metricKey, !selected)
+                      }
+
+                      ReorderHandle {
+                        metricKey: chip.metricKey
+                        candidates: root.orderedMetrics
+                        entries: chipEntries
+                      }
+                    }
+
+                    Rectangle {
+                      visible: page.reorderTarget === chip
+                      anchors.fill: parent
+                      radius: Commons.Style.space(8)
+                      color: "transparent"
+                      border.color: Commons.Color.accent
+                      border.width: 2
+                    }
+                  }
+                }
               }
             }
-
-            RoundedButton {
-              id: settingsButton
-              iconText: "󰒓"
-              Layout.preferredWidth: Commons.Style.space(37)
-              Layout.preferredHeight: Commons.Style.space(37)
-              radius: height / 2
-              iconSize: Commons.Style.space(17)
-              horizontalPadding: 0
-              verticalPadding: 0
-              color: root.showingSettings ? Commons.Color.accent : background
-              selected: root.showingSettings
-              fontFamily: button.fontFamily
-              hint: strings.t(root.showingSettings ? "hideSettings" : "settingsTitle")
-              foreground: root.showingSettings ? root.accentInk : root.panelInk
-              bordered: true
-              focusable: true
-              Accessible.name: hint
-              onClicked: root.showingSettings = !root.showingSettings
-            }
-          }
-
-          QQC.ScrollView {
-            id: scroll
-            readonly property real processOffset: view.item
-              ? Math.max(0, Math.min(view.item.processY, contentHeight - availableHeight)) : 0
-            readonly property real processPosition: (contentItem ? contentItem.originY : 0) + processOffset
-            readonly property bool atProcesses: !!contentItem && processOffset > 1
-              && contentItem.contentY >= processPosition - 1
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredHeight: Math.min(view.implicitHeight, Commons.Style.space(610))
-            clip: true
-            contentWidth: availableWidth
-            contentHeight: view.implicitHeight
-            QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
-
-            Loader {
-              id: view
-              width: scroll.availableWidth
-              sourceComponent: dashboard
-              onLoaded: {
-                if (scroll.contentItem)
-                  scroll.contentItem.contentY = 0
-              }
-            }
-          }
-        }
-      }
-
-      PaneSurface {
-        id: settingsPane
-        companion: true
-        visible: root.showingSettings
-        x: panel.sideBySide && !panel.settingsOnLeft ? panel.mainWidth + panel.paneGap : 0
-        y: panel.stacked ? (panel.barPos === "bottom" ? 0 : page.mainHeight + panel.paneGap)
-                         : (panel.barPos === "bottom" ? page.height - height : 0)
-        width: panel.settingsWidth
-        height: page.settingsHeight
-
-        ColumnLayout {
-          id: settingsLayout
-          anchors.fill: parent
-          anchors.margins: Commons.Style.space(10)
-          spacing: Commons.Style.space(8)
-
-          RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: Commons.Style.space(8)
-            Layout.rightMargin: Commons.Style.space(8)
-            Layout.topMargin: Commons.Style.space(6)
 
             PanelText {
+              visible: root.saveFailed
+              text: strings.t("saveError")
+              color: Commons.Color.urgent
               Layout.fillWidth: true
-              text: strings.t("settingsTitle")
-              font.pixelSize: Commons.Style.font.subtitle
-              font.bold: true
-            }
-
-            QuickButton {
-              text: "×"
-              hint: strings.t("hideSettings")
-              onClicked: {
-                root.showingSettings = false
-                settingsButton.forceActiveFocus()
-              }
-            }
-          }
-
-          QQC.ScrollView {
-            id: settingsScroll
-            background: null
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredHeight: settingsControls.implicitHeight
-            clip: true
-            contentWidth: availableWidth
-            contentHeight: settingsControls.implicitHeight
-            QQC.ScrollBar.horizontal.policy: QQC.ScrollBar.AlwaysOff
-
-            ColumnLayout {
-              id: settingsControls
-              width: settingsScroll.availableWidth
-              spacing: Commons.Style.space(8)
-
-              SettingsGroup {
-                title: strings.t("appearance")
-                Flow {
-                  Layout.fillWidth: true
-                  spacing: Commons.Style.space(8)
-
-                  RowLayout {
-                    spacing: Commons.Style.space(3)
-                    Repeater {
-                      model: root.modes
-                      QuickButton {
-                        required property string modelData
-                        iconText: modelData === "icons" ? "󰘔" : modelData === "text" ? "󰊄" : "󰌹"
-                        fontFamily: button.fontFamily
-                        hint: strings.t(modelData)
-                        selected: root.mode === modelData
-                        onClicked: root.save("mode", modelData)
-                      }
-                    }
-                  }
-
-                  RowLayout {
-                    spacing: Commons.Style.space(3)
-                    PanelText {
-                      text: strings.t("columnsShort")
-                      color: root.softInk
-                      font.pixelSize: Commons.Style.font.bodySmall
-                    }
-                    Repeater {
-                      model: root.columnOptions
-                      QuickButton {
-                        required property int modelData
-                        text: root.number(modelData, 0)
-                        hint: strings.t("cardsPerRow") + " · " + text
-                        selected: root.cardsPerRow === modelData
-                        onClicked: root.save("cardsPerRow", modelData)
-                      }
-                    }
-                  }
-
-                }
-
-                Flow {
-                  Layout.fillWidth: true
-                  spacing: Commons.Style.space(10)
-
-                  SizeControl {
-                    width: implicitWidth
-                    height: implicitHeight
-                    label: strings.t("fontShort")
-                    size: root.fontSize
-                    maximum: 18
-                    onModified: value => root.save("fontSize", value)
-                  }
-
-                  SizeControl {
-                    width: implicitWidth
-                    height: implicitHeight
-                    label: strings.t("iconsShort")
-                    size: root.iconSize
-                    maximum: 22
-                    onModified: value => root.save("iconSize", value)
-                  }
-                }
-
-                Ui.Toggle {
-                  Layout.fillWidth: true
-                  label: strings.t("glassFinish")
-                  checked: root.glassFinish
-                  foreground: root.panelInk
-                  radius: Commons.Style.space(14)
-                  rounded: true
-                  Accessible.role: Accessible.CheckBox
-                  Accessible.name: label
-                  Accessible.checked: checked
-                  onClicked: root.save("glassFinish", !checked)
-                }
-
-                Ui.Toggle {
-                  Layout.fillWidth: true
-                  visible: root.glassFinish
-                  label: strings.t("blurBackdrop")
-                  checked: root.blurBackdrop
-                  foreground: root.panelInk
-                  radius: Commons.Style.space(14)
-                  rounded: true
-                  Accessible.role: Accessible.CheckBox
-                  Accessible.name: label
-                  Accessible.checked: checked
-                  onClicked: root.save("blurBackdrop", !checked)
-                }
-
-                PanelText {
-                  visible: root.wantsBackdropBlur && root.backdropBlurFailed
-                  Layout.fillWidth: true
-                  text: strings.t("blurUnavailable")
-                  wrapMode: Text.WordWrap
-                  color: Commons.Color.urgent
-                }
-              }
-
-              SettingsGroup {
-                title: strings.t("samplingTitle")
-                SizeControl {
-                  label: strings.t("refreshInterval")
-                  size: root.refreshSeconds
-                  minimum: 1
-                  maximum: 30
-                  unit: " s"
-                  onModified: value => root.save("refreshSeconds", value)
-                }
-              }
-
-              SettingsGroup {
-                title: strings.t("metricsTitle")
-                Flow {
-                  Layout.fillWidth: true
-                  spacing: Commons.Style.space(4)
-
-                  Repeater {
-                    id: chipEntries
-                    model: root.orderedMetrics
-                    delegate: Item {
-                      id: chip
-                      required property var modelData
-                      readonly property string metricKey: modelData.key
-                      implicitWidth: chipRow.implicitWidth
-                      implicitHeight: chipRow.implicitHeight
-
-                      RowLayout {
-                        id: chipRow
-                        anchors.fill: parent
-                        spacing: Commons.Style.space(2)
-
-                        QuickButton {
-                          text: strings.t(chip.modelData.shortKey || chip.metricKey)
-                          hint: strings.t(chip.metricKey)
-                          selected: root.activeKeys.includes(chip.metricKey)
-                          Accessible.role: Accessible.CheckBox
-                          Accessible.checked: selected
-                          onClicked: root.toggleMetric(chip.metricKey, !selected)
-                        }
-
-                        ReorderHandle {
-                          metricKey: chip.metricKey
-                          candidates: root.orderedMetrics
-                          entries: chipEntries
-                        }
-                      }
-
-                      Rectangle {
-                        visible: page.reorderTarget === chip
-                        anchors.fill: parent
-                        radius: Commons.Style.space(8)
-                        color: "transparent"
-                        border.color: Commons.Color.accent
-                        border.width: 2
-                      }
-                    }
-                  }
-                }
-              }
-
-              PanelText {
-                visible: root.saveFailed
-                text: strings.t("saveError")
-                color: Commons.Color.urgent
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-              }
+              wrapMode: Text.WordWrap
             }
           }
         }
@@ -1323,7 +1108,6 @@ Ui.BarWidget {
           }
         }
       }
-
     }
   }
 }

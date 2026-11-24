@@ -1,10 +1,19 @@
 # ElMeGGa OmaVitals
 
-![Panel de ElMeGGa OmaVitals con gráficas de recursos y filtros de procesos](preview.png)
+![OmaVitals en Base, Cristal y Blur](preview.png)
+
+*Paneles renderizados con datos de ejemplo y la paleta Rubí OLED. El desenfoque del fondo está simulado en la captura.*
 
 Monitor de recursos para la barra de Omarchy. Muestra lecturas en vivo de CPU, RAM, zram, swap, GPU, disco, red, almacenamiento, batería y temperatura de CPU. Los sensores y datos de GPU disponibles dependen del equipo y sus controladores.
 
 El panel muestra gráficas del último minuto, barras de porcentaje y detalles de hardware. La sección de procesos permite buscar por nombre, programa, ruta o PID, filtrar por actividad y agrupar por programa o proceso padre.
+
+## Funciones
+
+- Elige las métricas visibles y reordénalas con el tirador de cada medidor o con las flechas cuando tiene el foco.
+- Configura la barra con iconos, texto o ambos. Ajusta los tamaños y el formato de cada lectura, como capacidad usada o restante, dirección del tráfico y grados Celsius o Fahrenheit.
+- Consulta el último minuto de gráficas y el detalle de hardware. Elige las tarjetas por fila y un intervalo de muestreo de 1 a 30 segundos.
+- Busca procesos, filtra por actividad, ordena por CPU, RAM, disco, antigüedad o nombre, y agrupa por programa o proceso padre. Puedes expandir los grupos y recorrer la lista por páginas.
 
 ## Requisitos
 
@@ -24,7 +33,21 @@ omarchy plugin add https://github.com/megga-ernesto/omavitals-monitor.git --enab
 
 Haz clic en el widget para abrir el panel. El engranaje despliega los ajustes de métricas, formatos de lectura, columnas y tamaños. El botón que está a su lado alterna entre las gráficas y la lista de procesos. Arrastra el tirador **⠿** de una tarjeta o pastilla para reordenar los medidores en el panel y en la barra.
 
-En **Configuración → Actualización** puedes elegir un intervalo de 1 a 30 segundos (2 segundos por defecto). El acabado cristal y el desenfoque de fondo son opcionales y vienen apagados. El desenfoque usa Hyprland y puede activar temporalmente el desenfoque del compositor mientras el panel está abierto.
+El intervalo de muestreo predeterminado es de 2 segundos.
+
+## Apariencia
+
+Elige un acabado en **Ajustes → Apariencia**.
+
+| Acabado | Apariencia |
+|---|---|
+| **Base** | Adopta el fondo, la transparencia y las reglas de composición de los paneles de Omarchy. |
+| **Cristal** | Aplica un degradado traslúcido con 6 %, 3 % y 0 % de acento del tema, de arriba abajo. |
+| **Blur** | Usa el mismo degradado y difumina el escritorio detrás del panel si Hyprland lo permite. |
+
+Si Hyprland no puede aplicar Blur, el panel muestra Cristal y explica el motivo en Apariencia.
+
+![Selector de apariencia y ajustes de medidores de OmaVitals](docs/appearance-settings.webp)
 
 ## Actualización y desinstalación
 

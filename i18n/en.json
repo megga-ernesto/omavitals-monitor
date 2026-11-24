@@ -117,5 +117,14 @@
   "blurBackdrop": "Blur the backdrop",
   "blurUnavailable": "Hyprland could not enable backdrop blur.",
   "samplingTitle": "Updates",
-  "refreshInterval": "Sampling interval"
+  "refreshInterval": "Sampling interval",
+  "oma.base": "Base",
+  "oma.glass": "Glass",
+  "oma.blur": "Blur",
+  "oma.saveFailed": "Could not save the appearance.",
+  "oma.materialFailed": "This shell can only display the base finish.",
+  "oma.blurFailed": "Showing glass. Hyprland backdrop blur is unavailable.",
+  "oma.settings": "Settings",
+  "oma.closeSettings": "Close settings",
+  "oma.appearance": "Appearance"
 }
